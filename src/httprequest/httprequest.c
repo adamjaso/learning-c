@@ -1,63 +1,47 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <netinet/ip.h>
-
-// This program sends an HTTP request to 127.0.0.1:8000 and prints
-// the response.
-
-#define HOST 2130706433
-#define PORT 8000
-#define REQUEST "GET /httprequest.c HTTP/1.1\r\n\r\n"
-#define BUFLEN 32
-
+#include<stdio.h>
+#include<errno.h>
+#include<stdlib.h>
+#include<string.h>
+#include<unistd.h>
+#include<sys/types.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include<netdb.h>
+#define perr(msg) do { printf(msg" %d\n", errno) ; exit(1) ; } while (0);
+#define BUFSIZE 80
+#define GET "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n"
+#define HOSTNAME "www.google.com"
 int main() {
-    int sockfd;
-    struct sockaddr_in sa;
-    memset(&sa, 0, sizeof(struct sockaddr_in));
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(PORT);
-    sa.sin_addr.s_addr = htonl(HOST);
+    int sock;
+    ssize_t ret;
+    struct sockaddr_in src;
+    struct addrinfo hints, *dst;
+    char buf[BUFSIZE];
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1) {
-        printf("socket errno %d\n", errno);
-        return 1;
-    }
+    memset(&src, 0, sizeof(src));
+    src.sin_family = AF_INET;
 
-    if (connect(sockfd, (struct sockaddr *) &sa, (socklen_t) sizeof (struct sockaddr_in)) == -1) {
-        printf("connect errno %d\n", errno);
-        return 1;
-    }
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
 
-    char req[BUFLEN] = REQUEST;
-    if (write(sockfd, req, strlen(req)) == -1) {
-        printf("write errno %d\n", errno);
-        return 1;
-    }
+    if (-1 == getaddrinfo(HOSTNAME, "80", &hints, &dst)) perr("getaddrinfo");
+    if (!dst) perr("unable to resolve "HOSTNAME);
 
-    char n = 1, res[BUFLEN];
-    while (n > 0) {
-        n = read(sockfd, res, BUFLEN);
-        if (n < 0) {
-            printf("read errno %d\n", errno);
-            return 1;
-        } else if (n == 0) {
-            break;
-        }
-        if (write(1, res, n) == -1) {
-            printf("print errno %d\n", errno);
-            return 1;
-        }
-    }
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (-1 == sock) perr("socket");
+    if (-1 == bind(sock, (struct sockaddr *) &src, sizeof (struct sockaddr_in))) perr("bind");
+    if (-1 == connect(sock, (struct sockaddr *) dst->ai_addr, sizeof (struct sockaddr_in))) perr("connect");
+    if (-1 == send(sock, GET, strlen(GET)+1, 0)) perr("send");
 
-    if (close(sockfd) == -1) {
-        printf("close errno %d\n", errno);
-        return 1;
+    while (1) {
+        ret = recv(sock, buf, sizeof (buf), 0);
+        if (-1 == ret) perr("recv");
+        if (0 == ret) break;
+        ret = fwrite(buf, ret, 1, stdout);
+        if (-1 == ret) perr("fwrite");
     }
+    printf("\n");
+    freeaddrinfo(dst);
 
     return 0;
-}
+};
