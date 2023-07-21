@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 CC := gcc
-CFLAGS := -Wall -pthread
+CFLAGS := -Wall -pthread -lcrypto
 
 all:
 	mkdir -p bin
